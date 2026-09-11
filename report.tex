@@ -1,193 +1,74 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[T1]{fontenc}
 \usepackage[margin=20mm,top=18mm,bottom=20mm]{geometry}
-\usepackage{xcolor}
-\usepackage{listings}
-\usepackage{booktabs}
-\usepackage{inconsolata}
-\usepackage{titlesec}
+\usepackage{graphicx}
 \usepackage[hidelinks,
   pdftitle={Optimization Techniques, Assignment 1},
   pdfauthor={Gaurav Choudhury (2501CS26)},
   pdfsubject={Big-M Simplex Method; Transportation Problem (VAM and MODI)}]{hyperref}
 
-\definecolor{kw}{HTML}{A11170}
-\definecolor{str}{HTML}{0B6B3A}
-\definecolor{cmt}{HTML}{7A7A7A}
-\definecolor{num}{HTML}{1A5FB4}
-\definecolor{codebg}{HTML}{FBFBFA}
-\definecolor{outbg}{HTML}{F2F2F0}
-\definecolor{rule}{HTML}{C8C8C8}
-\definecolor{gutter}{HTML}{A8A8A8}
-
-\lstdefinestyle{py}{
-  language=Python,
-  morekeywords={True,False,None,self},
-  basicstyle=\ttfamily\scriptsize,
-  keywordstyle=\color{kw}\bfseries,
-  stringstyle=\color{str},
-  commentstyle=\color{cmt}\itshape,
-  numbers=left, numberstyle=\tiny\color{gutter}, numbersep=9pt,
-  frame=single, rulecolor=\color{rule}, framesep=5pt,
-  backgroundcolor=\color{codebg},
-  showstringspaces=false, keepspaces=true, columns=fullflexible,
-  breaklines=true, breakatwhitespace=true, breakindent=14pt,
-  upquote=true, tabsize=4, xleftmargin=17pt,
-}
-\lstdefinestyle{out}{
-  basicstyle=\ttfamily\scriptsize,
-  frame=single, rulecolor=\color{rule}, framesep=5pt,
-  backgroundcolor=\color{outbg},
-  showstringspaces=false, keepspaces=true, columns=fullflexible,
-  breaklines=true, breakatwhitespace=true, upquote=true, tabsize=4,
-}
-\lstdefinestyle{plain}{
-  basicstyle=\ttfamily\small,
-  frame=leftline, rulecolor=\color{rule}, framesep=7pt,
-  showstringspaces=false, keepspaces=true, columns=fullflexible,
-  xleftmargin=6pt, tabsize=4,
-}
-
-\titleformat{\section}{\large\bfseries}{\thesection.}{0.6em}{}[\vspace{-.7em}\rule{\textwidth}{0.4pt}]
-\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
-\titlespacing*{\section}{0pt}{16pt}{8pt}
-\titlespacing*{\subsection}{0pt}{12pt}{5pt}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{5pt}
 \pagestyle{plain}
 
-\begin{document}
+% one carbon screenshot per block, never overflowing the page;
+% minipage keeps each label glued to its screenshot
+\newcommand{\shot}[2]{%
+  \begin{center}
+  \begin{minipage}{\textwidth}
+  \centering
+  {\small\texttt{#1}}\\[4pt]
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{#2}
+  \end{minipage}
+  \end{center}
+}
 
+\begin{document}
+\vspace*{\fill}
 \begin{center}
 {\LARGE\bfseries Optimization Techniques, Assignment 1}\\[7pt]
-{\large Gaurav Choudhury \quad$\cdot$\quad Roll No. 2501CS26}\\[7pt]
+{\large Gaurav Choudhury \quad$\cdot$\quad Roll No.\ 2501CS26}\\[7pt]
 {\normalsize Big-M Simplex Method \quad$\cdot$\quad Transportation Problem (VAM and MODI)}\\[3pt]
-{\small Python 3, standard library only. Exact arithmetic with \texttt{fractions.Fraction}.}
+{\small Python 3, standard library only.\ Screenshots: carbon.now.sh, One Dark theme.}
 \end{center}
-\vspace{4pt}\hrule\vspace{10pt}
+\vfill
+\clearpage
 
-\section{Big-M Simplex Method}
+\section{Big-M simplex method}
 
-The case study is the diet, or feed-blending, problem. A dairy blends two
-supplements into 1\,kg batches of cattle feed. Supplement A costs Rs\,4/kg and B
-costs Rs\,1/kg. The blend has to hit a protein specification exactly, clear a
-vitamin floor, and fit inside the mixing drum.
+\subsection*{Code: \texttt{assignment/big\_m\_simplex.py}}
+\shot{big\_m\_simplex.py, lines 1--49}{screenshots/bigm_code_1.png}
+\shot{big\_m\_simplex.py, lines 50--98}{screenshots/bigm_code_2.png}
+\shot{big\_m\_simplex.py, lines 99--147}{screenshots/bigm_code_3.png}
+\shot{big\_m\_simplex.py, lines 148--196}{screenshots/bigm_code_4.png}
 
-\subsection{Linear programming formulation}
-\begin{lstlisting}[style=plain]
-x1 = kg of supplement A per batch
-x2 = kg of supplement B per batch
-
-minimise    Z = 4*x1 + x2
-
-subject to  3*x1 +  x2  = 3      protein, exact specification
-            4*x1 + 3*x2 >= 6     vitamin premix floor
-             x1 + 2*x2  <= 4     mixing drum capacity
-            x1, x2 >= 0
-\end{lstlisting}
-
-\subsection{Conversion to standard form}
-The program adds the variables itself. Each row then owns exactly one basic
-variable, which gives the simplex a starting basis. The origin is not feasible
-here, which is why the artificial variables are there.
-
-\begin{center}
-\begin{tabular}{ll}
-\toprule
-\textbf{Constraint} & \textbf{Variables added}\\
-\midrule
-\texttt{3*x1 + x2 = 3}     & artificial \texttt{a1}\\
-\texttt{4*x1 + 3*x2 >= 6}  & surplus \texttt{e2}, artificial \texttt{a2}\\
-\texttt{x1 + 2*x2 <= 4}    & slack \texttt{s3}\\
-\bottomrule
-\end{tabular}
-\end{center}
-
-The objective penalises each artificial by \texttt{+M}. Instead of
-substituting a large number for M, the objective row is held as two parallel
-Fraction rows, one for the M coefficients and one for the constants. Comparing
-the pair \texttt{(M coefficient, constant)} reproduces the rule that any M term
-outweighs any constant. That avoids floating-point error, and it avoids having
-to guess a numeric M large enough for the data.
-
-\subsection{Code: \texttt{big\_m\_simplex.py}}
-\lstinputlisting[style=py]{assignment/big_m_simplex.py}
-
-\subsection{Output}
-\lstinputlisting[style=out]{outputs/big_m_output.txt}
-
-Optimal solution after 3 simplex iterations: \texttt{x1 = 2/5\,kg},
-\texttt{x2 = 9/5\,kg}, \texttt{Z = 17/5 = Rs 3.40} per batch.
+\subsection*{Output: \texttt{python3 assignment/big\_m\_simplex.py}}
+\shot{outputs/big\_m\_output.txt}{screenshots/bigm_output.png}
 
 \clearpage
-\section{Transportation Problem: VAM and MODI}
+\section{Vogel's Approximation Method (VAM)}
 
-The second case study is cement distribution. Three plants ship to four regional
-warehouses. Output and requirement are fixed for the month, and freight per
-tonne depends on which plant supplies which warehouse.
+\subsection*{Code: \texttt{assignment/transportation\_vam\_modi.py}}
+\shot{transportation\_vam\_modi.py, lines 1--42}{screenshots/vam_code_1.png}
+\shot{transportation\_vam\_modi.py, lines 43--84}{screenshots/vam_code_2.png}
+\shot{transportation\_vam\_modi.py, lines 85--126}{screenshots/vam_code_3.png}
+\shot{transportation\_vam\_modi.py, lines 127--168}{screenshots/vam_code_4.png}
+\shot{transportation\_vam\_modi.py, lines 169--210}{screenshots/vam_code_5.png}
+\shot{transportation\_vam\_modi.py, lines 211--252}{screenshots/vam_code_6.png}
 
-\subsection{Problem data}
-\begin{lstlisting}[style=plain]
-capacity (tonnes)  S1 = 20   S2 = 30   S3 = 50            total 100
-demand   (tonnes)  D1 = 10   D2 = 40   D3 = 20   D4 = 30  total 100
+\subsection*{Output: \texttt{python3 assignment/transportation\_vam\_modi.py --vam-only}}
+\shot{outputs/vam\_output.txt}{screenshots/vam_output.png}
 
-freight c_ij, Rs per tonne
+\clearpage
+\section{MODI optimality test / improvement}
 
-        D1    D2    D3    D4
-  S1     8     6    10     9
-  S2     9    12    13     7
-  S3    14     9    16     5
-\end{lstlisting}
+\subsection*{Code (excerpt): \texttt{modi} and \texttt{\_find\_cycle}}
+from \texttt{assignment/transportation\_vam\_modi.py}
+\shot{transportation\_vam\_modi.py, lines 98--131}{screenshots/modi_code_1.png}
+\shot{transportation\_vam\_modi.py, lines 132--160}{screenshots/modi_code_2.png}
+\shot{transportation\_vam\_modi.py, lines 161--190}{screenshots/modi_code_3.png}
 
-\subsection{Linear programming formulation}
-\begin{lstlisting}[style=plain]
-x_ij = tonnes shipped from plant i to warehouse j
-
-minimise    Z = sum_i sum_j  c_ij * x_ij
-
-subject to  sum_j x_ij = a_i    each plant ships its full output
-            sum_i x_ij = b_j    each warehouse gets its requirement
-            x_ij >= 0
-\end{lstlisting}
-
-Supply and demand balance in this case study. When they do not, the program
-inserts a zero-cost dummy row or column before solving.
-
-\subsection{Code: \texttt{transportation\_vam\_modi.py}}
-\lstinputlisting[style=py]{assignment/transportation_vam_modi.py}
-
-\subsection{Phase 1: Vogel's Approximation Method}
-VAM builds the initial basic feasible solution. It finds the row or column with
-the largest penalty, meaning the gap between that line's two cheapest cells,
-then fills the cheapest cell in that line as far as the remaining supply and
-demand allow, repeating until everything is allocated.
-
-\lstinputlisting[style=out]{outputs/vam_output.txt}
-
-\subsection{Phase 2: MODI}
-MODI tests that solution for optimality. It solves \texttt{u\_i + v\_j = c\_ij}
-across the basic cells, anchored at \texttt{u\_0 = 0}, to get shadow prices. Any
-non-basic cell whose opportunity cost \texttt{c\_ij - u\_i - v\_j} is negative
-would lower the total, so that cell enters the basis and the allocation shifts
-around a closed loop until no negative opportunity cost is left.
-
-\lstinputlisting[style=out]{outputs/vam_modi_output.txt}
-
-\enlargethispage{1.6\baselineskip}
-\subsection{Result}
-\begin{lstlisting}[style=plain]
-optimal shipment plan
-
-        D1    D2    D3    D4
-  S1     -    20     -     -
-  S2    10     -    20     -
-  S3     -    20     -    30
-
-minimum total cost = Rs 800
-\end{lstlisting}
-
-VAM reached the optimum directly, so the one MODI pivot is degenerate and
-confirms it rather than reducing the cost. Row sums, column sums and the
-m+n-1 basis count are asserted after every run.
+\subsection*{Output: \texttt{python3 assignment/transportation\_vam\_modi.py}}
+\shot{outputs/vam\_modi\_output.txt}{screenshots/modi_output.png}
 
 \end{document}
